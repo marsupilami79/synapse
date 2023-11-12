@@ -368,6 +368,17 @@ var
   function X509AddExt(x: PX509; ex: PX509_EXTENSION; loc: Integer): Integer;
   procedure X509ExtensionFree(ex: PX509_EXTENSION);
 
+  // utility function for adding extensions to a (self signed) certificate.
+  // It is based on work described in:
+  // https://stackoverflow.com/questions/35616853/openssl-x509-certificate-add-extension-with-x509-add1-ext-i2d
+  // https://stackoverflow.com/questions/31403065/how-to-set-the-keyusage-value-to-new-openssl-x509-certificate-in-c-program
+  // Usage examples:
+  //    X509AddExtension(x, NID_ext_key_usage, 'serverAuth,clientAuth');
+  //    X509AddExtension(x, NID_subject_alt_name, 'DNS:somehostname');
+  //    X509AddExtension(x, NID_basic_constraints, 'CA:true');
+  function X509AddExtension(cert: PX509; nid: Integer; value: String): Boolean;
+
+
   // 3DES functions
   procedure DESsetoddparity(Key: des_cblock);
   function DESsetkeychecked(key: des_cblock; schedule: des_key_schedule): Integer;
@@ -1282,6 +1293,35 @@ procedure X509ExtensionFree(ex: PX509_EXTENSION);
 begin
   if InitSSLInterface and Assigned(_X509ExtensionFree) then
     _X509ExtensionFree(ex);
+end;
+
+function X509AddExtension(cert: PX509; nid: Integer; value: String): Boolean;
+var
+  ctx: X509V3_CTX;
+  ex: PX509_EXTENSION;
+  OpResult: Integer;
+  LastError: Integer;
+begin
+  ex := nil;
+
+  // This sets the 'context' of the extensions. No configuration database
+  X509V3SetCtxNodb(ctx);
+
+  // Issuer and subject certs: both the target since it is self signed, no request and no CRL
+  X509V3SetCtx(@ctx, cert, cert, nil, nil, 0);
+  ex := X509V3ExtConfNid(nil, @ctx, nid, PAnsiChar(value));
+  if not assigned(ex) then
+    Result := False
+  else begin
+    OpResult := X509AddExt(cert, ex, -1);
+    if OpResult = 0 then begin
+      LastError := GetLastOsError;
+      ShowMessage('Last Error: ' + IntToStr(LastError));
+    end;
+    X509ExtensionFree(ex);
+
+    Result := OpResult = 1;
+  end;
 end;
 
 function EvpGetDigestByName(Name: AnsiString): PEVP_MD;
