@@ -160,6 +160,23 @@ type
   end;
   des_key_schedule = array[1..16] of des_ks_struct;
 
+  PX509_REQ = SslPtr;
+  PX509_CRL = SslPtr;
+  PX509V3_CONF_METHOD = SslPtr;
+  X509V3_CTX = packed record
+    flags: Integer;
+    issuer_cert: PX509;
+    subject_cert: PX509;
+    subject_req: PX509_REQ;
+    crl: PX509_CRL;
+    db_meth: PX509V3_CONF_METHOD;
+    db: Pointer;
+    (* Maybe more here *)
+  end;
+  PX509V3_CTX = ^X509V3_CTX;
+  PX509_EXTENSION = SslPtr;
+  Plhash_st_CONF_VALUE = SslPtr;
+
 const
   EVP_MAX_MD_SIZE = 16 + 20;
 
@@ -221,6 +238,11 @@ const
   X509_V_ERR_UNHANDLED_CRITICAL_EXTENSION = 34;
   //The application is not happy
   X509_V_ERR_APPLICATION_VERIFICATION = 50;
+
+  //Constants for X509V3ExtConfNid from obj_mac.inc
+  NID_subject_alt_name = 85;
+  NID_basic_constraints = 87;
+  NID_ext_key_usage = 126;
 
   SSL_FILETYPE_ASN1	= 2;
   SSL_FILETYPE_PEM = 1;
@@ -338,7 +360,13 @@ var
 
   function i2dPrivateKeyBio(b: PBIO; pkey: EVP_PKEY): integer;
 
-
+  procedure X509V3SetCtxNodb(var ctx: X509V3_CTX);
+  procedure X509V3SetCtx(ctx: PX509V3_CTX; issuer: PX509; subject: PX509;
+    req: PX509_REQ; crl: PX509_CRL; flags: Integer);
+  function X509V3ExtConfNid(conf: Plhash_st_CONF_VALUE; ctx: PX509V3_CTX;
+    ext_nid: Integer; value: PAnsiChar): PX509_EXTENSION;
+  function X509AddExt(x: PX509; ex: PX509_EXTENSION; loc: Integer): Integer;
+  procedure X509ExtensionFree(ex: PX509_EXTENSION);
 
   // 3DES functions
   procedure DESsetoddparity(Key: des_cblock);
@@ -431,6 +459,12 @@ type
   TX509SetNotBefore = function(x: PX509; tm: PASN1_UTCTIME): integer; cdecl;
   TX509SetNotAfter = function(x: PX509; tm: PASN1_UTCTIME): integer; cdecl;
   TX509GetSerialNumber = function(x: PX509): PASN1_INTEGER; cdecl;
+  TX509V3SetCtx = procedure(ctx: PX509V3_CTX; issuer: PX509; subject: PX509;
+    req: PX509_REQ; crl: PX509_CRL; flags: Integer); cdecl;
+  TX509V3ExtConfNid = function(conf: Plhash_st_CONF_VALUE; ctx: PX509V3_CTX;
+    ext_nid: Integer; value: PAnsiChar): PX509_EXTENSION; cdecl;
+  TX509AddExt = function(x: PX509; ex: PX509_EXTENSION; loc: Integer): Integer; cdecl;
+  TX509ExtensionFree = procedure(ex: PX509_EXTENSION); cdecl;
   TEvpPkeyNew = function: EVP_PKEY; cdecl;
   TEvpPkeyFree = procedure(pk: EVP_PKEY); cdecl;
   TEvpPkeyAssign = function(pkey: EVP_PKEY; _type: integer; key: Prsa): integer; cdecl;
@@ -458,6 +492,7 @@ type
   TPEMReadBioX509 = function(b:PBIO;  {var x:PX509;}x:PSslPtr; callback:PFunction; cb_arg:SslPtr): PX509;   cdecl; {pf}
   TSkX509PopFree = procedure(st: PSTACK; func: TSkPopFreeFunc); cdecl; {pf}
   Ti2dPrivateKeyBio= function(b: PBIO; pkey: EVP_PKEY): integer; cdecl;
+
 
   // 3DES functions
   TDESsetoddparity = procedure(Key: des_cblock); cdecl;
@@ -531,6 +566,10 @@ var
   _X509SetNotBefore: TX509SetNotBefore = nil;
   _X509SetNotAfter: TX509SetNotAfter = nil;
   _X509GetSerialNumber: TX509GetSerialNumber = nil;
+  _X509V3SetCtx: TX509V3SetCtx = nil;
+  _X509V3ExtConfNid: TX509V3ExtConfNid = nil;
+  _X509AddExt: TX509AddExt = nil;
+  _X509ExtensionFree: TX509ExtensionFree = nil;
   _EvpPkeyNew: TEvpPkeyNew = nil;
   _EvpPkeyFree: TEvpPkeyFree = nil;
   _EvpPkeyAssign: TEvpPkeyAssign = nil;
@@ -1210,6 +1249,41 @@ begin
     Result := 0;
 end;
 
+procedure X509V3SetCtxNodb(var ctx: X509V3_CTX);
+begin
+  ctx.db := nil;
+end;
+
+procedure X509V3SetCtx(ctx: PX509V3_CTX; issuer: PX509; subject: PX509;
+                   req: PX509_REQ; crl: PX509_CRL; flags: Integer);
+begin
+  if InitSSLInterface and Assigned(_X509V3SetCtx) then
+    _X509V3SetCtx(ctx, issuer, subject, req, crl, flags);
+end;
+
+function X509V3ExtConfNid(conf: Plhash_st_CONF_VALUE; ctx: PX509V3_CTX;
+  ext_nid: Integer; value: PAnsiChar): PX509_EXTENSION;
+begin
+  if InitSSLInterface and Assigned(_X509V3ExtConfNid) then
+    Result := _X509V3ExtConfNid(conf, ctx, ext_nid, value)
+  else
+    Result := nil;
+end;
+
+function X509AddExt(x: PX509; ex: PX509_EXTENSION; loc: Integer): Integer;
+begin
+  if InitSSLInterface and Assigned(_X509AddExt) then
+    Result := _X509AddExt(x, ex, loc)
+  else
+    Result := 0;
+end;
+
+procedure X509ExtensionFree(ex: PX509_EXTENSION);
+begin
+  if InitSSLInterface and Assigned(_X509ExtensionFree) then
+    _X509ExtensionFree(ex);
+end;
+
 function EvpGetDigestByName(Name: AnsiString): PEVP_MD;
 begin
   if InitSSLInterface and Assigned(_EvpGetDigestByName) then
@@ -1359,6 +1433,10 @@ begin
         _X509SetNotBefore := GetProcAddr(SSLUtilHandle, 'X509_set1_notBefore');
         _X509SetNotAfter := GetProcAddr(SSLUtilHandle, 'X509_set1_notAfter');
         _X509GetSerialNumber := GetProcAddr(SSLUtilHandle, 'X509_get_serialNumber');
+        _X509V3SetCtx := GetProcAddr(SSLUtilHandle, 'X509V3_set_ctx');
+        _X509V3ExtConfNid := GetProcAddr(SSLUtilHandle, 'X509V3_EXT_conf_nid');
+        _X509AddExt := GetProcAddr(SSLUtilHandle, 'X509_add_ext');
+        _X509ExtensionFree := GetProcAddr(SSLUtilHandle, 'X509_EXTENSION_free');
         _EvpPkeyNew := GetProcAddr(SSLUtilHandle, 'EVP_PKEY_new');
         _EvpPkeyFree := GetProcAddr(SSLUtilHandle, 'EVP_PKEY_free');
         _EvpPkeyAssign := GetProcAddr(SSLUtilHandle, 'EVP_PKEY_assign');
