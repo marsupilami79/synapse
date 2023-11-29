@@ -176,6 +176,7 @@ type
   PX509V3_CTX = ^X509V3_CTX;
   PX509_EXTENSION = SslPtr;
   Plhash_st_CONF_VALUE = SslPtr;
+  PASN1_PCTX = SslPtr;
 
 const
   EVP_MAX_MD_SIZE = 16 + 20;
@@ -367,6 +368,7 @@ var
     ext_nid: Integer; value: PAnsiChar): PX509_EXTENSION;
   function X509AddExt(x: PX509; ex: PX509_EXTENSION; loc: Integer): Integer;
   procedure X509ExtensionFree(ex: PX509_EXTENSION);
+  function EvpPkeyPrintPublic(outvar: PBIO; pkey: EVP_PKEY; indent: Integer; pctx: PASN1_PCTX): integer;
 
   // utility function for adding extensions to a (self signed) certificate.
   // It is based on work described in:
@@ -476,6 +478,8 @@ type
     ext_nid: Integer; value: PAnsiChar): PX509_EXTENSION; cdecl;
   TX509AddExt = function(x: PX509; ex: PX509_EXTENSION; loc: Integer): Integer; cdecl;
   TX509ExtensionFree = procedure(ex: PX509_EXTENSION); cdecl;
+  TEvpPkeyPrintPublic = function(outvar: PBIO; pkey: EVP_PKEY; indent: Integer;
+    pctx: PASN1_PCTX): Integer; cdecl;
   TEvpPkeyNew = function: EVP_PKEY; cdecl;
   TEvpPkeyFree = procedure(pk: EVP_PKEY); cdecl;
   TEvpPkeyAssign = function(pkey: EVP_PKEY; _type: integer; key: Prsa): integer; cdecl;
@@ -581,6 +585,7 @@ var
   _X509V3ExtConfNid: TX509V3ExtConfNid = nil;
   _X509AddExt: TX509AddExt = nil;
   _X509ExtensionFree: TX509ExtensionFree = nil;
+  _EvpPkeyPrintPublic: TEvpPkeyPrintPublic = nil;
   _EvpPkeyNew: TEvpPkeyNew = nil;
   _EvpPkeyFree: TEvpPkeyFree = nil;
   _EvpPkeyAssign: TEvpPkeyAssign = nil;
@@ -1295,6 +1300,15 @@ begin
     _X509ExtensionFree(ex);
 end;
 
+function EvpPkeyPrintPublic (outvar: PBIO; pkey: EVP_PKEY; indent: Integer;
+  pctx: PASN1_PCTX): Integer;
+begin
+  if InitSSLInterface and Assigned(_EvpPkeyPrintPublic) then
+    Result := _EvpPkeyPrintPublic(outvar, pkey, indent, pctx)
+  else
+    Result := 0;
+end;
+
 function X509AddExtension(cert: PX509; nid: Integer; value: String): Boolean;
 var
   ctx: X509V3_CTX;
@@ -1315,8 +1329,8 @@ begin
   else begin
     OpResult := X509AddExt(cert, ex, -1);
     if OpResult = 0 then begin
-      LastError := GetLastOsError;
-      ShowMessage('Last Error: ' + IntToStr(LastError));
+      //LastError := GetLastOsError;
+      //ShowMessage('Last Error: ' + IntToStr(LastError));
     end;
     X509ExtensionFree(ex);
 
@@ -1477,6 +1491,7 @@ begin
         _X509V3ExtConfNid := GetProcAddr(SSLUtilHandle, 'X509V3_EXT_conf_nid');
         _X509AddExt := GetProcAddr(SSLUtilHandle, 'X509_add_ext');
         _X509ExtensionFree := GetProcAddr(SSLUtilHandle, 'X509_EXTENSION_free');
+        _EvpPkeyPrintPublic := GetProcAddr(SSLUtilHandle, 'EVP_PKEY_print_public');
         _EvpPkeyNew := GetProcAddr(SSLUtilHandle, 'EVP_PKEY_new');
         _EvpPkeyFree := GetProcAddr(SSLUtilHandle, 'EVP_PKEY_free');
         _EvpPkeyAssign := GetProcAddr(SSLUtilHandle, 'EVP_PKEY_assign');
