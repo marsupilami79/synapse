@@ -369,6 +369,7 @@ var
   function X509AddExt(x: PX509; ex: PX509_EXTENSION; loc: Integer): Integer;
   procedure X509ExtensionFree(ex: PX509_EXTENSION);
   function EvpPkeyPrintPublic(outvar: PBIO; pkey: EVP_PKEY; indent: Integer; pctx: PASN1_PCTX): integer;
+  function Asn1UtctimePrint(b: PBIO; s: PASN1_UTCTIME): Integer;
 
   // utility function for adding extensions to a (self signed) certificate.
   // It is based on work described in:
@@ -480,6 +481,7 @@ type
   TX509ExtensionFree = procedure(ex: PX509_EXTENSION); cdecl;
   TEvpPkeyPrintPublic = function(outvar: PBIO; pkey: EVP_PKEY; indent: Integer;
     pctx: PASN1_PCTX): Integer; cdecl;
+  TAsn1UtctimePrint = function(b: PBIO; s: PASN1_UTCTIME): Integer;
   TEvpPkeyNew = function: EVP_PKEY; cdecl;
   TEvpPkeyFree = procedure(pk: EVP_PKEY); cdecl;
   TEvpPkeyAssign = function(pkey: EVP_PKEY; _type: integer; key: Prsa): integer; cdecl;
@@ -586,6 +588,7 @@ var
   _X509AddExt: TX509AddExt = nil;
   _X509ExtensionFree: TX509ExtensionFree = nil;
   _EvpPkeyPrintPublic: TEvpPkeyPrintPublic = nil;
+  _Asn1UtctimePrint: TAsn1UtctimePrint = nil;
   _EvpPkeyNew: TEvpPkeyNew = nil;
   _EvpPkeyFree: TEvpPkeyFree = nil;
   _EvpPkeyAssign: TEvpPkeyAssign = nil;
@@ -1309,6 +1312,14 @@ begin
     Result := 0;
 end;
 
+function Asn1UtctimePrint(b: PBIO; s: PASN1_UTCTIME): Integer;
+begin
+  if InitSSLInterface and Assigned(_EvpPkeyPrintPublic) then
+    Result := _Asn1UtctimePrint(b, s)
+  else
+    Result := 0;
+end;
+
 function X509AddExtension(cert: PX509; nid: Integer; value: String): Boolean;
 var
   ctx: X509V3_CTX;
@@ -1492,6 +1503,7 @@ begin
         _X509AddExt := GetProcAddr(SSLUtilHandle, 'X509_add_ext');
         _X509ExtensionFree := GetProcAddr(SSLUtilHandle, 'X509_EXTENSION_free');
         _EvpPkeyPrintPublic := GetProcAddr(SSLUtilHandle, 'EVP_PKEY_print_public');
+        _Asn1UtctimePrint := GetProcAddr(SSLUtilHandle, 'ASN1_UTCTIME_print');
         _EvpPkeyNew := GetProcAddr(SSLUtilHandle, 'EVP_PKEY_new');
         _EvpPkeyFree := GetProcAddr(SSLUtilHandle, 'EVP_PKEY_free');
         _EvpPkeyAssign := GetProcAddr(SSLUtilHandle, 'EVP_PKEY_assign');
