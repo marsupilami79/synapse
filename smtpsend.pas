@@ -70,6 +70,14 @@ const
   cSmtpProtocol = '25';
 
 type
+  {:Delivery Status Notification for SMTP:
+     * NEVER - means that under no circumstances must a DSN be returned to the sender.
+     * SUCCESS - notifies when mail has arrived at its destination.
+     * FAILURE - delivers a DSN if an error occurred during delivery.
+     * DELAY - sends a notification if there is an unusual delay in delivery, but the actual delivery's outcome (success or failure) is not yet decided.}
+  TDSNType = (dtNever, dtSuccess, dtFailure, dtDelay);
+  TDSNTypes = set of TDSNType;
+
   {:@abstract(Implementation of SMTP and ESMTP procotol),
    include some ESMTP extensions, include SSL/TLS too.
 
@@ -96,6 +104,8 @@ type
     FAutoTLS: Boolean;
     FFullSSL: Boolean;
     FTlsCertCaFile: String;
+    FDSN: Boolean;
+    FDSNTypes: TDSNTypes;
     procedure EnhancedCode(const Value: string);
     function ReadResult: Integer;
     function AuthLogin: Boolean;
@@ -104,6 +114,7 @@ type
     function Helo: Boolean;
     function Ehlo: Boolean;
     function Connect: Boolean;
+    procedure SetDSNTypes(Value: TDSNTypes);
   public
     constructor Create;
     destructor Destroy; override;
@@ -217,6 +228,12 @@ type
      if this method is supported and how! With OpenSSL 3.2 and later it also can be
      a URI}
     property TlsCertCaFile: String read FTlsCertCaFile write FTlsCertCaFile;
+	
+    {:does server supports Delivery Status Notification (DSN)}
+    property DSN: Boolean read FDSN;
+
+    {:type(s) of Delivery Status Notification (DSN)}
+    property DSNTypes: TDSNTypes read FDSNTypes write SetDSNTypes;	
   end;
 
 {:A very useful function and example of its use would be found in the TSMTPsend
@@ -279,6 +296,7 @@ begin
   FSystemName := FSock.LocalName;
   FAutoTLS := False;
   FFullSSL := False;
+  FDSN := False;
 end;
 
 destructor TSMTPSend.Destroy;
@@ -400,6 +418,16 @@ begin
   Result := FSock.LastError = 0;
 end;
 
+procedure TSMTPSend.SetDSNTypes(Value: TDSNTypes);
+var
+  i: Integer;
+begin
+  if dtNever in Value then
+    FDSNTypes := [dtNever]
+  else
+    FDSNTypes := Value;
+end;
+
 function TSMTPSend.Helo: Boolean;
 var
   x: Integer;
@@ -480,6 +508,7 @@ begin
       FESMTPsize := True;
       FMaxSize := StrToIntDef(Copy(s, 6, Length(s) - 5), 0);
     end;
+    FDSN := (FindCap('DSN') = 'DSN');	
   end;
 end;
 
@@ -514,8 +543,28 @@ begin
 end;
 
 function TSMTPSend.MailTo(const Value: string): Boolean;
+var
+  s: string;
+  DSNType: TDSNType;
 begin
-  FSock.SendString('RCPT TO:<' + Value + '>' + CRLF);
+  s := 'RCPT TO:<' + Value + '>';
+  if FDSN and (FDSNTypes <> []) then
+  begin
+    s := s + ' NOTIFY=';
+    for DSNType in FDSNTypes do
+    begin
+      if RightStr(s, 1) <> '=' then
+        s := s + ',';
+      case DSNType of
+        dtNever: s := s + 'NEVER';
+        dtSuccess: s := s + 'SUCCESS';
+        dtFailure: s := s + 'FAILURE';
+        dtDelay: s := s + 'DELAY';
+      end;
+    end;
+    s := s + ' ORCPT=rfc822;' + Value;
+  end;
+  FSock.SendString(s + CRLF);
   Result := ReadResult div 100 = 2;
 end;
 
@@ -679,7 +728,7 @@ begin
     // SMTP.Sock.SocksIP := '127.0.0.1';
     // SMTP.Sock.SocksPort := '1080';
 // if you need support for upgrade session to TSL/SSL, uncomment next lines:
-    // SMTP.AutoTLS := True;
+    SMTP.AutoTLS := True;
 // if you need support for TSL/SSL tunnel, uncomment next lines:
     // SMTP.FullSSL := True;
     SMTP.TargetHost := Trim(SeparateLeft(SMTPHost, ':'));
