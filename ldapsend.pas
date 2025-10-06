@@ -67,6 +67,7 @@ uses
 
 const
   cLDAPProtocol = '389';
+  cLDAPSProtocol = '636';
 
   LDAP_ASN1_BIND_REQUEST = $60;
   LDAP_ASN1_BIND_RESPONSE = $61;
@@ -538,7 +539,7 @@ begin
   FSock := TTCPBlockSocket.Create;
   FSock.Owner := self;
   FTimeout := 60000;
-  FTargetPort := cLDAPProtocol;
+  FTargetPort := '';
   FAutoTLS := False;
   FFullSSL := False;
   FSeq := 0;
@@ -649,14 +650,22 @@ begin
 end;
 
 function TLDAPSend.Connect: Boolean;
+var
+  TargetPort: String;
 begin
   // Do not call this function! It is calling by LOGIN method!
+  TargetPort := Trim(FTargetPort);
+  if (TargetPort = '0') or (TargetPort = '') then
+    if FFullSSL then
+      TargetPort := cLDAPSProtocol
+    else
+      TargetPort := cLDAPProtocol;
   FSock.CloseSocket;
   FSock.LineBuffer := '';
   FSeq := 0;
   FSock.Bind(FIPInterface, cAnyPort);
   if FSock.LastError = 0 then
-    FSock.Connect(FTargetHost, FTargetPort);
+    FSock.Connect(FTargetHost, TargetPort);
   if FSock.LastError = 0 then
     if FFullSSL then
       FSock.SSLDoConnect;
