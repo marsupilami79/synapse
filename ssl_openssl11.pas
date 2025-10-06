@@ -157,6 +157,10 @@ type
 
 implementation
 
+{$IF DEFINED(FPC) AND DEFINED(LINUX)}
+uses initc, errors;
+{$IFEND}
+
 {==============================================================================}
 
 function PasswordCallback(buf:PAnsiChar; size:Integer; rwflag:Integer; userdata: Pointer):Integer; cdecl;
@@ -516,7 +520,17 @@ begin
       x := sslconnect(FSsl);
       if x < 1 then
       begin
+        {$IF DEFINED(FPC) AND DEFINED(LINUX)}
+        err := SslGetError(FSsl, x);
+        if err = SSL_ERROR_SYSCALL then begin
+          err := cerrno;
+          FLastError := err;
+          FLastErrorDesc := StrError(err);
+        end else if err = SSL_ERROR_SSL then
+          SSLCheck;
+        {$ELSE}
         SSLcheck;
+        {$IFEND}
         Exit;
       end;
     end
