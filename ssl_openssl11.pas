@@ -1,5 +1,5 @@
 {==============================================================================|
-| Project : Ararat Synapse                                       | 002.000.001 |
+| Project : Ararat Synapse                                       | 002.000.002 |
 |==============================================================================|
 | Content: SSL support by OpenSSL                                              |
 |==============================================================================|
@@ -395,7 +395,7 @@ begin
     if FPFX <> '' then
       if not LoadPFX(FPfx) then
         Exit;
-    if (FCertCAFile = '') and (FPFXfile = '') and (FPFX = '') then;
+    if (FCertCAFile = '') and (FPFXfile = '') and (FPFX = '') then
       if SslCtxSetDefaultVerifyPaths(FCtx) <> 1 then
         Exit;
     SSLCheck;
