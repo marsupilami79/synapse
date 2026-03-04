@@ -419,8 +419,6 @@ begin
 end;
 
 procedure TSMTPSend.SetDSNTypes(Value: TDSNTypes);
-var
-  i: Integer;
 begin
   if dtNever in Value then
     FDSNTypes := [dtNever]
@@ -553,7 +551,7 @@ begin
     s := s + ' NOTIFY=';
     for DSNType in FDSNTypes do
     begin
-      if RightStr(s, 1) <> '=' then
+      if s[Lenght(s)] <> '=' then
         s := s + ',';
       case DSNType of
         dtNever: s := s + 'NEVER';
